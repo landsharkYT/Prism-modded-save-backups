@@ -1,0 +1,43 @@
+# === Star Technology — git scope: script + docs only ===
+# Repo lives in a 640M Prism instance. Default: track nothing heavy.
+# Git tracks: *.sh, *.md, .gitignore, mmc-pack.json, modlist.html, flame/
+# Everything else is ignored. Force-add with `git add -f <path>` if you ever mean it.
+
+# --- Prism launch churn (rewritten every launch: lastLaunchTime, totalTimePlayed) ---
+instance.cfg
+
+# --- Prism runtime (271M mods, 123M config, 31M saves, 34M backups, 22M logs) ---
+# Backup script READS saves/"New World" but git must never commit it.
+minecraft/
+
+# --- Modpack + misc heavies at root of minecraft/ ---
+*.zip
+*.jar
+*.litematic
+*.schem
+*.schematic
+
+# --- Script runtime outputs (never commit, never upload twice) ---
+backup-startech.log
+*.tmp.zip
+/New World-*.zip
+/New World-*.sha1
+
+# --- FTB / Prism local state (machine-local, regenerates) ---
+flame/cache/
+usercache.json
+usernamecache.json
+
+# --- Logs / crash reports ---
+logs/
+crash-reports/
+*.log
+*.log.gz
+
+# --- OS / editor ---
+.DS_Store
+Thumbs.db
+*~
+*.swp
+.vscode/
+.idea/
