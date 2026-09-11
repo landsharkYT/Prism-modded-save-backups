@@ -1,6 +1,6 @@
 # Star Technology Backup
 
-Any Prism instance's world backups pushed to Google Drive via rclone, plus a reusable installer that sets the same setup up on a stranger's machine. No local bloat, no game data in git.
+Any Prism instance's world backups pushed to Google Drive via rclone, plus a reusable installer that repeats the setup on a stranger's machine. No local bloat, no game data in git.
 
 ## Language
 

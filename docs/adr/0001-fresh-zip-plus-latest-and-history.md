@@ -2,7 +2,7 @@
 
 We zip `saves/New World/` on every run instead of re-uploading the FTB mod's `minecraft/backups/*.zip`, and in Drive we maintain both `New World-latest.zip` (overwritten) and the newest 5 timestamped zips, because FTB zips can be 30min stale and a lone overwritten file gives no rollback.
 
-## Considered Options
+## Considered options
 
-- Re-upload newest FTB zip: safer while game is open but stale, couples us to `backups.json`.
-- Lone mirror with no history: smallest Drive use but one corrupt upload erases the only copy.
+- Re-uploading the newest FTB zip is safer while the game is open, but the zip can be 30min stale, and it couples us to `backups.json`.
+- A lone mirror with no history uses the least Drive space, but one corrupt upload erases the only copy.
