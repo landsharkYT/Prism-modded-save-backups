@@ -64,11 +64,11 @@ Exit-code contract (both scripts, asserted in bats): `0` = ok; `1` = runtime fai
 - [x] Missing `zip`/`rclone` aborts with per-distro install hints, exit 2, nothing changed.
 - [x] `tests/test-install.bats` green (hermetic: stub `rclone`, scripted answers, never real `rclone config`).
 - [x] Live `install.sh` on this machine: detects `~/.local/bin/rclone` + `gdrive:`, all checks pass, first-backup offer declined. (2026-09-10, `--yes`, suite re-ran green inside)
-- [ ] Scripts run from a repo subfolder auto-adopt the instance root ≤3 levels up with a NOTICE line (bats, both scripts).
-- [ ] No instance root within 3 levels up → exit 2 listing every directory checked (bats, both scripts).
-- [ ] `install.log` is created beside the script with the install transcript; the persists-nothing test allows exactly the two scripts + `minecraft/` + `install.log`.
-- [ ] Exit-code contract holds: every failure-path test asserts its code (audit green, no bare `exit` without a code).
-- [ ] `README.md` exists: install instructions, subfolder-mistake guidance, troubleshooting; contracts only linked, never copied.
+- [x] Scripts run from a repo subfolder auto-adopt the instance root ≤3 levels up with a NOTICE line (bats 9 + 35, both scripts).
+- [x] No instance root within 3 levels up → exit 2 listing every directory checked (bats 10 + 36, both scripts).
+- [x] `install.log` is created beside the script with the install transcript; the persists-nothing test allows exactly the two scripts + `minecraft/` + `install.log`. (bats 20)
+- [x] Exit-code contract holds: every failure-path test asserts its code (audit green, no bare `exit` without a code).
+- [x] `README.md` exists: install instructions, subfolder-mistake guidance, troubleshooting; contracts only linked, never copied.
 
 ## 8. Installer (reusable setup, settled in installer grilling R1–R2)
 
