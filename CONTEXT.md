@@ -35,3 +35,7 @@ _Avoid_: setup wizard, bootstrap
 **Detected Remote**:
 An rclone Drive remote already on the machine, offered for reuse before creating a new one.
 _Avoid_: existing remote, saved login
+
+**Instance Root**:
+The Prism instance folder containing `minecraft/saves/`. Scripts resolve it upward from wherever they live.
+_Avoid_: install dir, game folder, working directory
