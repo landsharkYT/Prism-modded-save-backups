@@ -68,8 +68,8 @@ STUBEOF
 
 teardown() {
   if [[ -n "${HOLDER_PID:-}" ]]; then kill "$HOLDER_PID" 2>/dev/null || true; fi
-  for d in "${TINSTANCE:-}" "${FAKE_REMOTE:-}" "${TMP_BIN:-}" "${TMP_HOME:-}"; do
-    [[ -n "$d" && -d "$d" ]] && rm -rf "$d"
+  for d in "${TINSTANCE:-}" "${FAKE_REMOTE:-}" "${TMP_BIN:-}" "${TMP_HOME:-}" "${DEEPROOT:-}"; do
+    if [[ -n "$d" && -d "$d" ]]; then rm -rf "$d"; fi
   done
 }
 
@@ -105,6 +105,7 @@ remote_dir() { printf '%s/%s' "$FAKE_REMOTE" "Prism-StarTechnology"; }
   run_backup "$WORLD"
   [ "$status" -eq 0 ]
   [[ "$output" == *"Backup OK"* ]]
+  [[ "$output" != *"NOTICE"* ]] # at the root: nothing to resolve
 
   mapfile -t all < <(find "$(remote_dir)" -maxdepth 1 -name "$WORLD-*.zip" -printf '%f\n' | sort || true)
   [ "${#all[@]}" -eq 2 ]
@@ -169,4 +170,31 @@ remote_dir() { printf '%s/%s' "$FAKE_REMOTE" "Prism-StarTechnology"; }
   [ "$status" -eq 0 ]
   [ "$(sha1sum "$TINSTANCE/minecraft/backups/DO_NOT_TOUCH.txt")" == "$before" ]
   [ "$(ls -A "$TINSTANCE/minecraft/backups")" == "DO_NOT_TOUCH.txt" ]
+}
+
+@test "subfolder placement resolves the instance root with NOTICE (FR-18)" {
+  mkdir -p "$TINSTANCE/tools"
+  mv "$TINSTANCE/backup-startech.sh" "$TINSTANCE/tools/"
+  run env RCLONE="$TMP_BIN/rclone" REMOTE="$REMOTE" \
+    HOME="$TMP_HOME" PATH="$TMP_BIN:$PATH" \
+    "$TINSTANCE/tools/backup-startech.sh" "$WORLD"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"NOTICE: using instance root at $TINSTANCE"* ]]
+  [[ "$output" == *"Backup OK"* ]]
+  mapfile -t all < <(find "$(remote_dir)" -maxdepth 1 -name "$WORLD-*.zip" -printf '%f\n' | sort || true)
+  [ "${#all[@]}" -eq 2 ]
+}
+
+@test "no instance root within 3 levels aborts listing checked dirs (FR-18)" {
+  DEEPROOT="$(mktemp -d /tmp/bats-deep-XXXXXX)"
+  DEEP="$DEEPROOT/a/b/c/d/e"
+  mkdir -p "$DEEP"
+  cp "$ORIG_SCRIPT" "$DEEP/backup-startech.sh"
+  run env RCLONE="$TMP_BIN/rclone" REMOTE="$REMOTE" \
+    HOME="$TMP_HOME" PATH="$TMP_BIN:$PATH" \
+    "$DEEP/backup-startech.sh" "$WORLD"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"Checked:"* ]]
+  [[ "$output" == *"$DEEP"* ]]
+  [[ "$output" == *"no minecraft/saves/ within 3 levels"* ]]
 }

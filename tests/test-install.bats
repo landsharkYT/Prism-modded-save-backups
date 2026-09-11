@@ -65,13 +65,13 @@ STUBEOF
 }
 
 teardown() {
-  for d in "${TINSTANCE:-}" "${TMP_BIN:-}" "${TMP_HOME:-}" "${EMPTYDIR:-}"; do
+  for d in "${TINSTANCE:-}" "${TMP_BIN:-}" "${TMP_HOME:-}" "${EMPTYDIR:-}" "${DEEPROOT:-}"; do
     if [[ -n "$d" && -d "$d" ]]; then rm -rf "$d"; fi
   done
 }
 
 run_install() {
-  run env HOME="$TMP_HOME" PATH="$TMP_BIN" "$TINSTANCE/install.sh" "$@"
+  run env HOME="$TMP_HOME" PATH="$TMP_BIN" "${INSTALL_SH:-$TINSTANCE/install.sh}" "$@"
 }
 
 @test "layout gate: aborts outside an instance dir (FR-10)" {
@@ -89,7 +89,8 @@ run_install() {
   [ "$status" -eq 2 ]
   [[ "$output" == *"rclone.org"* ]]
   mapfile -t top < <(find "$TINSTANCE" -mindepth 1 -maxdepth 1 -printf '%f\n' | sort)
-  [ "${#top[@]}" -eq 3 ] # install.sh, backup-startech.sh, minecraft/ — nothing added
+  [ "${#top[@]}" -eq 4 ] # scripts + minecraft + install.log transcript — still no state
+  [[ " ${top[*]} " == *"install.log"* ]]
 }
 
 @test "missing rclone aborts with install hints (FR-11, FR-12)" {
@@ -162,16 +163,19 @@ run_install() {
   [[ "$output" == *"ok 1 smoke"* ]]
 }
 
-@test "persists nothing: no state files beyond the two scripts (FR-15)" {
+@test "persists nothing but the transcript: scripts + minecraft + install.log (FR-15, FR-16)" {
   echo "gdrive:" > "$STUB_LIST"
   echo "gdrive:drive" > "$STUB_TYPES"
   run_install --yes --world "$WORLD" --keep 5
   [ "$status" -eq 0 ]
+  [[ "$output" != *"NOTICE"* ]] # at the root: nothing to resolve
   mapfile -t leftovers < <(find "$TINSTANCE" -mindepth 1 -maxdepth 1 -printf '%f\n' | sort)
-  [ "${#leftovers[@]}" -eq 3 ]
+  [ "${#leftovers[@]}" -eq 4 ]
   [[ " ${leftovers[*]} " == *"install.sh"* ]]
   [[ " ${leftovers[*]} " == *"backup-startech.sh"* ]]
   [[ " ${leftovers[*]} " == *"minecraft"* ]]
+  [[ " ${leftovers[*]} " == *"install.log"* ]]
+  grep -q "install OK" "$TINSTANCE/install.log"
 }
 
 # Links real bats + everything its wrapper shells out to (libexec
@@ -309,4 +313,30 @@ STUBEOF
   grep -q "WORLD=New World" "$BACKUP_CALLS"
   grep -q "REMOTE=gdrive:" "$BACKUP_CALLS"
   grep -q "KEEP=7" "$BACKUP_CALLS"
+}
+
+@test "subfolder placement resolves the instance root with NOTICE (FR-18)" {
+  mkdir -p "$TINSTANCE/tools"
+  mv "$TINSTANCE/install.sh" "$TINSTANCE/tools/install.sh"
+  mv "$TINSTANCE/backup-startech.sh" "$TINSTANCE/tools/backup-startech.sh"
+  echo "gdrive:" > "$STUB_LIST"
+  echo "gdrive:drive" > "$STUB_TYPES"
+  INSTALL_SH="$TINSTANCE/tools/install.sh" run_install --yes --world "$WORLD" --keep 5
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"NOTICE: using instance root at $TINSTANCE"* ]]
+  [[ "$output" == *"install OK"* ]]
+  [[ "$output" == *"REMOTE=gdrive:$(basename "$TINSTANCE")"* ]]
+}
+
+@test "no instance root within 3 levels aborts listing checked dirs (FR-18)" {
+  DEEPROOT="$(mktemp -d /tmp/bats-ideep-XXXXXX)"
+  DEEP="$DEEPROOT/a/b/c/d/e"
+  mkdir -p "$DEEP"
+  cp "$ORIG_INSTALL" "$DEEP/install.sh"
+  chmod +x "$DEEP/install.sh"
+  run env HOME="$TMP_HOME" PATH="$TMP_BIN" "$DEEP/install.sh" --yes
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"Checked:"* ]]
+  [[ "$output" == *"$DEEP"* ]]
+  [[ "$output" == *"no minecraft/saves/ within 3 levels"* ]]
 }
