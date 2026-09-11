@@ -54,15 +54,35 @@ while [[ $# -gt 0 ]]; do
 done
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LOG="$SCRIPT_DIR/install.log"
+INSTANCE_ROOT=""
 RCLONE_BIN=""
 REMOTE_NAME=""
 
-say() { printf '%s\n' "$*"; }
-die() { local code="$1"; shift; printf 'ERROR: %s\n' "$*" >&2; exit "$code"; }
+say() { printf '%s\n' "$*" | tee -a "$LOG"; }
+die() { local code="$1"; shift; printf 'ERROR: %s\n' "$*" | tee -a "$LOG" >&2; exit "$code"; }
 
-# --- FR-10: layout gate (clone ≡ zip; anything else aborts) ---
-SAVES_DIR="$SCRIPT_DIR/minecraft/saves"
-[[ -d "$SAVES_DIR" ]] || die 2 "not a Prism instance folder (no minecraft/saves/ under $SCRIPT_DIR). Clone or extract this repo INTO your instance folder, then re-run."
+# --- FR-18: instance root resolution (self + ≤3 levels up, never down). ---
+resolve_instance_root() {
+  local d="$SCRIPT_DIR" i checked=()
+  for i in 1 2 3 4; do
+    checked+=("$d")
+    if [[ -d "$d/minecraft/saves" ]]; then
+      INSTANCE_ROOT="$d"
+      [[ "$INSTANCE_ROOT" != "$SCRIPT_DIR" ]] && say "NOTICE: using instance root at $INSTANCE_ROOT (scripts live in $SCRIPT_DIR)"
+      return 0
+    fi
+    [[ "$d" == "/" ]] && break
+    d="$(dirname "$d")"
+  done
+  printf 'ERROR: not a Prism instance folder. Clone or extract this repo INTO your instance folder.\nChecked:\n' >&2
+  printf '  %s\n' "${checked[@]}" >&2
+  die 2 "no minecraft/saves/ within 3 levels above $SCRIPT_DIR."
+}
+resolve_instance_root
+
+# --- FR-10: layout gate (clone ≡ zip; repo may sit up to 3 levels deep) ---
+SAVES_DIR="$INSTANCE_ROOT/minecraft/saves"
 WORLD_DIRS=()
 for d in "$SAVES_DIR"/*/; do
   [[ -d "$d" ]] && WORLD_DIRS+=("$(basename "$d")")
@@ -250,7 +270,7 @@ main() {
   WORLD="${WORLD:-$(prompt "World to back up" "$def_world")}"
   [[ -d "$SAVES_DIR/$WORLD" ]] || die 2 "world '$WORLD' not found in minecraft/saves/. Available: ${WORLD_DIRS[*]}"
   local def_folder folder
-  def_folder="$(basename "$SCRIPT_DIR")"
+  def_folder="$(basename "$INSTANCE_ROOT")"
   folder="$(prompt "Drive folder" "$def_folder")"
   [[ -n "$folder" ]] || die 2 "Drive folder must not be empty."
   KEEP="${KEEP:-$(prompt "Versions to keep" "5")}"

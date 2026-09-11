@@ -36,9 +36,7 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOG="$SCRIPT_DIR/backup-startech.log"
-SAVES_DIR="$SCRIPT_DIR/minecraft/saves"
-WORLD_DIR="$SAVES_DIR/$WORLD"
-LOCK_FILE="$WORLD_DIR/session.lock"
+INSTANCE_ROOT=""
 TMPDIR=""
 
 log() {
@@ -54,6 +52,30 @@ fail() {
   echo "ERROR: $*" >&2
   exit 1
 }
+
+# --- FR-18: instance root resolution (self + ≤3 levels up, never down). ---
+resolve_instance_root() {
+  local d="$SCRIPT_DIR" i checked=()
+  for i in 1 2 3 4; do
+    checked+=("$d")
+    if [[ -d "$d/minecraft/saves" ]]; then
+      INSTANCE_ROOT="$d"
+      [[ "$INSTANCE_ROOT" != "$SCRIPT_DIR" ]] && log "NOTICE: using instance root at $INSTANCE_ROOT (scripts live in $SCRIPT_DIR)"
+      return 0
+    fi
+    [[ "$d" == "/" ]] && break
+    d="$(dirname "$d")"
+  done
+  echo "ERROR: not a Prism instance folder. Clone or extract this repo INTO your instance folder." >&2
+  echo "Checked:" >&2
+  printf '  %s\n' "${checked[@]}" >&2
+  echo "ERROR: no minecraft/saves/ within 3 levels above $SCRIPT_DIR." >&2
+  exit 2
+}
+resolve_instance_root
+SAVES_DIR="$INSTANCE_ROOT/minecraft/saves"
+WORLD_DIR="$SAVES_DIR/$WORLD"
+LOCK_FILE="$WORLD_DIR/session.lock"
 
 # --- FR-8: dependencies (missing = usage error, exit 2) ---
 if ! command -v zip >/dev/null 2>&1; then
