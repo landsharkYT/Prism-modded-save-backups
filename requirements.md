@@ -1,10 +1,12 @@
-# Requirements — Star Technology Drive backup script
+# Requirements — Prism modded save backups
 
 ## 1. Goal
 
 One `.sh` run = fresh zip of the live world `New World`, uploaded to Google Drive as both an overwritten `latest` mirror and a retained timestamped history, with zero lasting local disk cost and loud failure instead of silent corruption.
 
-## 2. Scope (settled in grilling R1–R2)
+A reusable `install.sh` turns a fresh clone (or zip-extract) inside any Prism instance folder into the same working setup: detected or newly-authed Drive access, verified scripts, no state files left behind.
+
+## 2. Scope (settled in grilling R1–R2 + installer R1–R2)
 
 - Instance: `Star Technology` (MC 1.20.1 / Forge 47.4.20) at
   `~/.local/share/PrismLauncher/instances/Star Technology/`
@@ -13,6 +15,7 @@ One `.sh` run = fresh zip of the live world `New World`, uploaded to Google Driv
 - Remote: `gdrive:Prism-StarTechnology/` via `~/.local/bin/rclone` (remote `gdrive:` already authed). Auto-`mkdir` on first run.
 - Script + this file live in instance root. Zero-arg default, optional `WORLD` override arg.
 - Git tracks script + docs + stable manifests only (`mmc-pack.json`, `modlist.html`, `flame/`). `instance.cfg` is ignored — it churns every launch (`lastLaunchTime`, `totalTimePlayed`). Game data never in git.
+- Reusable entry: `git clone` this repo (or extract its zip) into any Prism instance dir, run `./install.sh`. Clone ≡ zip; both gated by the layout check (FR-10).
 
 ## 3. Functional requirements
 
@@ -43,6 +46,7 @@ One `.sh` run = fresh zip of the live world `New World`, uploaded to Google Driv
 ## 6. Non-goals (v1)
 
 - No scheduling/cron/systemd timer, no restore/download command, no pruning of `minecraft/backups/`, no multi-world loop, no `.docx` handling, no mount-based (`~/gdrive`) copy.
+- Installer: no `sudo` package installs, no credential storage in the repo, no `backup.conf` state file.
 
 ## 7. Acceptance
 
@@ -52,7 +56,22 @@ One `.sh` run = fresh zip of the live world `New World`, uploaded to Google Driv
 - [x] `bats tests/` green (8 tests, hermetic: stub `rclone` + fixture world, never real saves/Drive).
 - [x] `git status --short` shows only `backup-startech.sh`, `requirements.md`, `CONTEXT.md`, `docs/`, `.gitignore` (+ stable `mmc-pack.json`, `modlist.html`, `flame/`, `tests/`) — no `minecraft/` content, no `instance.cfg`.
 - [x] `du -sh minecraft/backups minecraft/saves` unchanged after runs. (31M / 34M before and after)
+- [x] `./install.sh` aborts outside an instance dir (`minecraft/saves/` missing), exit 2. (bats test 9)
+- [x] Missing `zip`/`rclone` aborts with per-distro install hints, exit 2, nothing changed. (bats tests 10–11)
+- [x] `tests/test-install.bats` green (hermetic: stub `rclone`, piped answers, never real `rclone config`). (10/10, full suite 18/18)
+- [x] Live `install.sh` on this machine: detects `~/.local/bin/rclone` + `gdrive:`, all checks pass, first-backup offer declined. (2026-09-10, `--yes`, suite re-ran green inside)
 
-## 8. Decisions recorded
+## 8. Installer (reusable setup, settled in installer grilling R1–R2)
+
+- **FR-10 Layout gate.** Refuse unless run from a Prism instance root: `minecraft/saves/` exists with at least one world. Else abort exit 2: "run this from inside your Prism instance folder". Clone ≡ zip, no other entry-path handling.
+- **FR-11 Dependency check, no auto-install.** Require `bash`/`zip`; resolve `rclone` per FR-12. `unzip`/`python3`/`bats` optional (`bats` absent = warn-only skip). Anything required and missing → print the exact per-distro install command (`pacman`/`apt`/`dnf`/`brew`, plus rclone's official install script) and exit 2. Never `sudo`, never install.
+- **FR-12 rclone discovery.** Candidates in order: `PATH`, then `$HOME/.local/bin/rclone`. Echo resolved path + `rclone version`. Ask y/n to use it (`--yes` implies yes). None found → FR-11 hints + exit 2.
+- **FR-13 Remote triage.** `rclone listremotes`, Drive-type only: zero → auth path (FR-14); exactly one → y/n "use `<name>:`?" (no → auth path); several → numbered pick-list + "set up new" option. Non-Drive remotes are never offered.
+- **FR-14 Auth loop.** Launch interactive `rclone config`, then re-detect and prove with `rclone about <remote>`. Failure → abort, no partial state. No TTY and no `--yes` → print manual steps instead, exit 2; with `--yes`, attempt the config once (a stubbed/piped config can succeed, a real closed-stdin one falls back to the manual steps).
+- **FR-15 Backup configuration, no persistence.** Prompt `WORLD` (default: first world in `saves/`, or `New World` if present), Drive folder (default: instance dir basename, e.g. `Prism-StarTechnology`), `KEEP` (default 5). Write nothing to disk. Print the exact run command (`WORLD=… REMOTE=<name>:<folder> KEEP=… ./backup-startech.sh`).
+- **FR-16 Verification.** `chmod +x` both scripts, `bash -n` both (abort on failure), `bats tests/` if bats exists else warn. Offer the first real backup, y/n, default No — never implied, not even by `--yes`.
+- **FR-17 Automation.** Flags `--yes`, `--world=`, `--remote=` (full `name:folder`), `--keep=` plus env `INSTALL_YES`/`INSTALL_WORLD`/`INSTALL_REMOTE`/`INSTALL_KEEP`. Prompt only for what is still unset and only if stdin is a TTY; otherwise exit 2.
+
+## 9. Decisions recorded
 
 - ADR-0001: fresh zip + latest-mirror + KEEP=5 over re-uploading FTB zips.

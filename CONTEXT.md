@@ -1,6 +1,6 @@
 # Star Technology Backup
 
-One Prism instance's world backups pushed to Google Drive via rclone, with no local bloat and no accidental git commits of game data.
+Any Prism instance's world backups pushed to Google Drive via rclone, plus a reusable installer that sets the same setup up on a stranger's machine. No local bloat, no game data in git.
 
 ## Language
 
@@ -27,3 +27,11 @@ _Avoid_: script backup, Drive backup
 **Guard**:
 The pre-flight check that refuses to run while the game holds `session.lock`.
 _Avoid_: lock check, safety check
+
+**Installer**:
+The first-run setup that detects tools and Drive access and proves the backup works.
+_Avoid_: setup wizard, bootstrap
+
+**Detected Remote**:
+An rclone Drive remote already on the machine, offered for reuse before creating a new one.
+_Avoid_: existing remote, saved login
