@@ -154,11 +154,7 @@ run_install() {
 @test "runs bats suite when present and continues on green (FR-16)" {
   mkdir -p "$TINSTANCE/tests"
   printf '@test "smoke" { true; }\n' > "$TINSTANCE/tests/smoke.bats"
-  ln -s "$(command -v bats)" "$TMP_BIN/bats"
-  ln -s "$(command -v env)" "$TMP_BIN/env" # /usr/bin/bats re-execs itself via env
-  ln -s "$(command -v readlink)" "$TMP_BIN/readlink" # wrapper locates its libexec
-  libexec="$(dirname "$(readlink -f "$(command -v bats)")")"
-  for b in "$libexec"/bats-*; do ln -s "$b" "$TMP_BIN/$(basename "$b")"; done
+  with_bats
   echo "gdrive:" > "$STUB_LIST"
   echo "gdrive:drive" > "$STUB_TYPES"
   run_install --yes --world "$WORLD"
@@ -176,4 +172,141 @@ run_install() {
   [[ " ${leftovers[*]} " == *"install.sh"* ]]
   [[ " ${leftovers[*]} " == *"backup-startech.sh"* ]]
   [[ " ${leftovers[*]} " == *"minecraft"* ]]
+}
+
+# Links real bats + everything its wrapper shells out to (libexec
+# helpers, env, readlink) into the hermetic TESTBIN.
+with_bats() {
+  ln -s "$(command -v bats)" "$TMP_BIN/bats"
+  ln -s "$(command -v env)" "$TMP_BIN/env"
+  ln -s "$(command -v readlink)" "$TMP_BIN/readlink"
+  local libexec b
+  libexec="$(dirname "$(readlink -f "$(command -v bats)")")"
+  for b in "$libexec"/bats-*; do ln -s "$b" "$TMP_BIN/$(basename "$b")"; done
+}
+
+@test "help exits 0 and prints usage" {
+  run_install --help
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Usage:"* ]]
+}
+
+@test "unknown arg is a usage error" {
+  run_install --bogus
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"Usage:"* ]]
+}
+
+@test "flag without value is a usage error" {
+  run_install --world
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"needs a value"* ]]
+}
+
+@test "malformed --remote without colon is a usage error" {
+  echo "gdrive:" > "$STUB_LIST"
+  echo "gdrive:drive" > "$STUB_TYPES"
+  run_install --yes --remote "gdrive" --world "$WORLD"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"must look like name:folder"* ]]
+}
+
+@test "bad --keep values are rejected" {
+  echo "gdrive:" > "$STUB_LIST"
+  echo "gdrive:drive" > "$STUB_TYPES"
+  run_install --yes --world "$WORLD" --keep abc
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"positive integer"* ]]
+  run_install --yes --world "$WORLD" --keep 0
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"positive integer"* ]]
+}
+
+@test "unknown world aborts and lists available worlds" {
+  echo "gdrive:" > "$STUB_LIST"
+  echo "gdrive:drive" > "$STUB_TYPES"
+  run_install --yes --world "Nope" --keep 5
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"not found"* ]]
+  [[ "$output" == *"$WORLD"* ]]
+}
+
+@test "declined rclone aborts before touching anything" {
+  echo "gdrive:" > "$STUB_LIST"
+  echo "gdrive:drive" > "$STUB_TYPES"
+  run_install --world "$WORLD" <<< $'n\n'
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"declined"* ]]
+  grep -q "version" "$STUB_CALLS"
+  [ "$(grep -c "about\|config" "$STUB_CALLS" || true)" -eq 0 ]
+}
+
+@test "invalid pick aborts" {
+  printf 'gdrive:\nworkdrive:\n' > "$STUB_LIST"
+  printf 'gdrive:drive\nworkdrive:drive\n' > "$STUB_TYPES"
+  run_install --world "$WORLD" --keep 2 <<< $'y\n9\n'
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"invalid pick"* ]]
+}
+
+@test "--yes with several remotes demands --remote" {
+  printf 'gdrive:\nworkdrive:\n' > "$STUB_LIST"
+  printf 'gdrive:drive\nworkdrive:drive\n' > "$STUB_TYPES"
+  run_install --yes --world "$WORLD"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"several Drive remotes"* ]]
+}
+
+@test "declining the single remote falls through to setup and uses the new one" {
+  echo "gdrive:" > "$STUB_LIST"
+  echo "gdrive:drive" > "$STUB_TYPES"
+  run script -qec "env HOME='$TMP_HOME' PATH='$TMP_BIN' '$TINSTANCE/install.sh' --world '$WORLD' --keep 5" /dev/null <<< $'y\nn\n\n\n\n\n'
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"REMOTE=newdrive:"* ]]
+}
+
+@test "pick-new sets up and uses the new remote" {
+  printf 'gdrive:\nworkdrive:\n' > "$STUB_LIST"
+  printf 'gdrive:drive\nworkdrive:drive\n' > "$STUB_TYPES"
+  run script -qec "env HOME='$TMP_HOME' PATH='$TMP_BIN' '$TINSTANCE/install.sh' --world '$WORLD' --keep 5" /dev/null <<< $'y\nn\n\n\n\n\n'
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"REMOTE=newdrive:"* ]]
+}
+
+@test "--remote naming an absent remote falls through to setup, then fails loud" {
+  echo "gdrive:" > "$STUB_LIST"
+  echo "gdrive:drive" > "$STUB_TYPES"
+  run script -qec "env HOME='$TMP_HOME' PATH='$TMP_BIN' '$TINSTANCE/install.sh' --yes --world '$WORLD' --remote 'ghost:Folder'" /dev/null <<< $'\n'
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"still missing"* ]]
+}
+
+@test "red test suite aborts the install (FR-16)" {
+  mkdir -p "$TINSTANCE/tests"
+  printf '@test "boom" { false; }\n' > "$TINSTANCE/tests/fail.bats"
+  with_bats
+  echo "gdrive:" > "$STUB_LIST"
+  echo "gdrive:drive" > "$STUB_TYPES"
+  run_install --yes --world "$WORLD"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"test suite failed"* ]]
+}
+
+@test "accepting the first backup invokes it with the configured values" {
+  cat > "$TINSTANCE/backup-startech.sh" <<'STUBEOF'
+#!/usr/bin/env bash
+printf 'backup invoked WORLD=%s REMOTE=%s KEEP=%s ARGS=%s\n' "$WORLD" "$REMOTE" "$KEEP" "$*" >> "$BACKUP_CALLS"
+exit 0
+STUBEOF
+  chmod +x "$TINSTANCE/backup-startech.sh"
+  BACKUP_CALLS="$TMP_BIN/backup-calls.log"
+  : > "$BACKUP_CALLS"
+  export BACKUP_CALLS
+  echo "gdrive:" > "$STUB_LIST"
+  echo "gdrive:drive" > "$STUB_TYPES"
+  run_install --world "$WORLD" --keep 7 <<< $'y\ny\n\ny\n'
+  [ "$status" -eq 0 ]
+  grep -q "WORLD=New World" "$BACKUP_CALLS"
+  grep -q "REMOTE=gdrive:" "$BACKUP_CALLS"
+  grep -q "KEEP=7" "$BACKUP_CALLS"
 }
