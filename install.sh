@@ -202,7 +202,9 @@ resolve_remote_name() {
       auth_path
       mapfile -t Rs < <(list_drive_remotes)
       ((${#Rs[@]} >= 1)) || die 1 "no Drive remote available."
-      REMOTE_NAME="${Rs[0]}"
+      # Last entry: a just-configured remote lands at the end of the config,
+      # and taking [0] would reselect the remote the user just declined.
+      REMOTE_NAME="${Rs[-1]}"
     fi
   fi
   if [[ -z "$REMOTE_NAME" ]]; then
